@@ -59,7 +59,7 @@ Tkinter трогает только главный поток: клавиши и
 ## Установка и запуск
 
 ```
-git clone https://github.com/<твой-ник>/livedub.git
+git clone https://github.com/DazaiT/livedub.git
 cd livedub
 pip install -r requirements.txt
 python livedub.py
