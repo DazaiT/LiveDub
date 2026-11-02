@@ -1,0 +1,8 @@
+faster-whisper
+soundcard>=0.4.4
+deep-translator
+edge-tts
+numpy
+requests
+pystray
+pillow
