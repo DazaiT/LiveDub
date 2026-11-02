@@ -59,7 +59,7 @@ UI threads never touch Tkinter directly: hotkeys and the tray put commands in `c
 ## Install and run
 
 ```
-git clone https://github.com/<your-username>/livedub.git
+git clone https://github.com/DazaiT/livedub.git
 cd livedub
 pip install -r requirements.txt
 python livedub.py
