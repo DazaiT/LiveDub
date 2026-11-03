@@ -11,7 +11,8 @@
 - **Live subtitles** over any app (borderless-window games, browsers, players). The last 3 phrases stay on screen: the newest is big and bright, older ones shrink and fade, so you have time to finish reading.
 - **Dubbing**: reads the translated speech aloud in your headphones.
 - **Voice mode**: hold a key, speak your language, release, and the translation is spoken into a virtual microphone (works in Discord, Zoom, Teams, OBS, games...). While the key is held, your real voice is muted for the other side.
-- **Runs in the tray**, sleeps until you wake it, controlled entirely from the NumPad. Subtitles can be moved between monitors.
+- **A real app window with settings**: light or dark theme that follows Windows, interface in English, Russian, Dutch and Ukrainian, choice of languages, Whisper model size, voices, audio devices and subtitle look. Everything applies on the fly and is saved to `settings.json`.
+- **Runs in the tray** and is fully controllable from the NumPad. Subtitles can be moved between monitors.
 - **Speech recognition is local** (Whisper via `faster-whisper`, on an NVIDIA GPU or on the CPU). Only short pieces of *text* are sent to online services for translation and voice synthesis.
 - Any source language Whisper knows (about 99), or `auto` to translate everything that is not your language.
 
@@ -34,7 +35,17 @@
    -> Whisper (your language) -> translation -> edge-tts -> VB-Cable
 ```
 
-Everything is in one file, [`livedub.py`](livedub.py). It runs a few threads that talk through queues:
+The code is split into a few small modules:
+
+| File | What it does |
+|---|---|
+| [`livedub.py`](livedub.py) | entry point: logging, model folder, starts everything |
+| [`engine.py`](engine.py) | all the logic, no UI: audio, recognition, translation, voices, hotkeys |
+| [`ui.py`](ui.py) | settings window (customtkinter), subtitle overlay (Tkinter), tray icon (`pystray`) |
+| [`config.py`](config.py) | default settings, `settings.json`, language and voice lists |
+| [`i18n.py`](i18n.py) | interface translations |
+
+`engine.py` runs a few threads that talk through queues:
 
 | Thread / function | What it does |
 |---|---|
@@ -44,9 +55,9 @@ Everything is in one file, [`livedub.py`](livedub.py). It runs a few threads tha
 | `mic_loop` / `mic_session` | passes your microphone to the virtual cable, mutes it while you hold the key |
 | `voice_out_loop` | your speech -> translation -> synthesized voice into the cable |
 | `hotkey_thread` | global NumPad hotkeys (`RegisterHotKey`), detects key release for push-to-talk |
-| `main` | Tkinter overlay, tray icon (`pystray`), command queue |
+| `model_worker` | loads or reloads the Whisper model in the background |
 
-UI threads never touch Tkinter directly: hotkeys and the tray put commands in `cmd_q`, and the Tk thread processes them.
+Only the main thread touches Tkinter: hotkeys, tray and the engine put commands and messages into queues (`cmd_q`, `text_q`), and `ui.py` processes them.
 
 ## Requirements
 
@@ -67,20 +78,15 @@ python livedub.py
 
 The first start downloads the Whisper model (about 1.5 GB for `medium`) into the `models` folder next to the script. For a silent start without a console window, use `start.bat`.
 
-The program starts asleep. Press **Num1** (NumLock on) to turn the subtitles on.
+The settings window opens and the subtitles start asleep. Turn them on with the switch in the window or press **Num1** (NumLock on). Closing the window keeps the program running in the tray.
 
 ### Settings
 
-Everything is at the top of `livedub.py`:
+Open the **Languages**, **Audio**, **Subtitles**, **Model** and **App** tabs of the window. Changes apply immediately and are saved to `settings.json` next to the program (delete it to reset everything). The main ones:
 
-```python
-SOURCE_LANG = "nl"     # language of the other people ("auto" = anything except yours)
-TARGET_LANG = "ru"     # your language: subtitles, dubbing, and the language you speak
-PTT_LANGS = {"7": "nl", "8": "en"}   # hold Num7 / Num8 -> translate your speech into this
-GPU_MODEL = "medium"   # "small" is lighter on the GPU (less lag in games)
-```
-
-Voices for each language are in `VOICES` (Edge TTS voice names).
+- **Languages**: what the other people speak (or auto-detect), your own language, and the languages Num7 / Num8 translate your speech into. The voices are chosen here too.
+- **Model**: `tiny`, `base`, `small`, `medium`, `large-v3`, on GPU or CPU. Press *Apply* to reload. `small` is lighter on the GPU in games.
+- **App**: interface language, theme (system / light / dark), start minimized to the tray, hotkey modifier.
 
 ### NVIDIA GPU
 
@@ -90,7 +96,7 @@ The script tries the GPU first and falls back to the CPU by itself. If GPU mode 
 
 1. Install VB-Cable and reboot.
 2. In your call app (Discord, Zoom, ...) choose **CABLE Output** as the microphone.
-3. Keep your real microphone as the Windows default (or set `MIC_NAME`).
+3. Keep your real microphone as the Windows default (or pick it in the **Audio** tab).
 4. Hold **Num7** or **Num8**, speak, release.
 
 Voice mode starts together with the program, because the call app now listens to the virtual cable. Press **Num6** to turn it off.
@@ -104,12 +110,12 @@ Voice mode starts together with the program, because the call app now listens to
 | Num3 | show / hide the original text |
 | Num4 / Num5 | smaller / bigger text |
 | Num6 | voice mode on / off |
-| Num7 / Num8 (hold) | speak -> translation into `PTT_LANGS` |
+| Num7 / Num8 (hold) | speak -> translation into the language set in the **Languages** tab |
 | Num0 | dubbing of the other person on / off |
 | Num. | repeat the last phrase aloud |
 | Num9 | quit |
 
-Plain NumPad keys are taken by the program while it runs. Set `HOTKEY_MODIFIER = "ctrl"` to use Ctrl+Num instead. Subtitles can be dragged with the mouse; right click clears them. The tray icon has the same actions.
+Plain NumPad keys are taken by the program while it runs. In the **App** tab you can switch the hotkeys to Ctrl+Num (or Alt, or Ctrl+Alt) instead. Subtitles can be dragged with the mouse; right click clears them. The tray icon has the same actions.
 
 ## Build an .exe (optional)
 
@@ -119,9 +125,9 @@ Run `build.bat`. The result is in `dist\LiveDub`. This build is experimental, ru
 
 - Windows only (WASAPI loopback, global hotkeys, tray).
 - While dubbing is playing in your headphones, recognition is paused, otherwise the program would hear and translate its own voice.
-- Phrases are cut by pauses, so very fast speech is translated in pieces. Raise `PAUSE_SECONDS` / `MAX_SECONDS` for more complete sentences at the cost of delay.
+- Phrases are cut by pauses, so very fast speech is translated in pieces. In the **Model** tab raise the pause and maximum phrase length for more complete sentences, at the cost of delay.
 - Exclusive-fullscreen games hide the overlay; use borderless windowed mode.
-- The UI texts and code comments are currently in Russian.
+- Code comments are in Russian (the interface itself has 4 languages, see `i18n.py` to add more).
 
 ## Privacy and consent
 

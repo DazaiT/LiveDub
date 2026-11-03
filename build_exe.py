@@ -21,6 +21,8 @@ cmd = [
     "--collect-all", "tokenizers",
     "--collect-all", "soundcard",
     "--collect-all", "pystray",
+    "--collect-all", "customtkinter",
+    "--hidden-import", "darkdetect",
     "--collect-all", "edge_tts",
     "--collect-all", "certifi",
     "--hidden-import", "pystray._win32",
