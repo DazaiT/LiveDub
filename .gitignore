@@ -1,0 +1,18 @@
+   # модели Whisper (скачиваются сами, весят сотни МБ)
+   models/
+
+   # личные настройки и логи
+   settings.json
+   livedub.log
+   translator.log
+
+   # сборка exe
+   build/
+   dist/
+   *.spec
+
+   # Python
+   __pycache__/
+   *.pyc
+   .venv/
+   venv/
