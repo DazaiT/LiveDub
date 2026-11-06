@@ -50,6 +50,14 @@ if os.path.isdir(models):
     print("Копирую уже скачанные модели...")
     shutil.copytree(models, os.path.join(dist, "models"), dirs_exist_ok=True)
 
+# языки лежат рядом с exe как обычные файлы: их можно менять и добавлять без пересборки
+for name in ("locales", "languages.json"):
+    src = os.path.join(HERE, name)
+    if os.path.isdir(src):
+        shutil.copytree(src, os.path.join(dist, name), dirs_exist_ok=True)
+    elif os.path.isfile(src):
+        shutil.copy(src, dist)
+
 print()
 print("ГОТОВО. Программа лежит здесь:")
 print(os.path.join(dist, NAME + ".exe"))

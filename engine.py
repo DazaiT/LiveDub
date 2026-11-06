@@ -25,6 +25,7 @@ try:
 except ImportError:
     edge_tts = None
 
+import config
 from config import MODELS_DIR, VOICE_CHOICES, cfg
 from i18n import t
 
@@ -32,7 +33,7 @@ warnings.filterwarnings("ignore", message="data discontinuity in recording")
 
 SAMPLE_RATE = 16000
 MIC_RATE = 48000
-BLOCK_SECONDS = 0.2
+BLOCK_SECONDS = 0.1
 
 HOTKEY_ACTIONS = {           # код клавиши NumPad -> команда
     0x61: "toggle",          # Num1
@@ -237,7 +238,7 @@ def record_session():
     print(f"Слушаю устройство: {speaker.name}")
     mic = sc.get_microphone(id=str(speaker.name), include_loopback=True)
     block_frames = int(SAMPLE_RATE * BLOCK_SECONDS)
-    pre_roll = deque(maxlen=2)
+    pre_roll = deque(maxlen=4)
     buf = []
     speaking = False
     silent_blocks = 0
@@ -287,15 +288,18 @@ def capture_loop():
 
 # ---------- перевод ----------
 class GtxTranslator:
-    """Бесплатный endpoint Google, лучше переносит частые запросы."""
+    """Бесплатный endpoint Google. Соединение переиспользуется, поэтому запросы быстрее."""
 
     def __init__(self, source, target):
         self.source = source
         self.target = target
+        self.session = None
 
     def translate(self, text):
         import requests
-        r = requests.get(
+        if self.session is None:
+            self.session = requests.Session()
+        r = self.session.get(
             "https://translate.googleapis.com/translate_a/single",
             params={"client": "gtx", "sl": self.source, "tl": self.target, "dt": "t", "q": text},
             timeout=6,
@@ -307,16 +311,14 @@ class GtxTranslator:
 
 class Translator:
     """Google (gtx) -> deep-translator -> MyMemory. Сломавшийся сервис отключается на минуту."""
-    NAMES = {"nl": "dutch", "ru": "russian", "en": "english", "de": "german", "fr": "french",
-             "es": "spanish", "it": "italian", "pl": "polish", "uk": "ukrainian",
-             "pt": "portuguese", "tr": "turkish", "ja": "japanese"}
 
     def __init__(self, source, target):
-        self.engines = [["gtx", GtxTranslator(source, target), 0.0],
-                        ["google", GoogleTranslator(source=source, target=target), 0.0]]
+        src, tgt = config.google_code(source), config.google_code(target)
+        self.engines = [["gtx", GtxTranslator(src, tgt), 0.0],
+                        ["google", GoogleTranslator(source=src, target=tgt), 0.0]]
         try:
             self.engines.append(["mymemory", MyMemoryTranslator(
-                source=self.NAMES[source], target=self.NAMES[target]), 0.0])
+                source=config.MYMEMORY[source], target=config.MYMEMORY[target]), 0.0])
         except Exception:
             pass
 
@@ -354,6 +356,7 @@ def translate_loop():
             continue
         try:
             src, tgt = cfg["source_lang"], cfg["target_lang"]
+            t_start = time.time()
             with model_lock:
                 m = model_ref["m"]
                 if m is None:
@@ -369,12 +372,17 @@ def translate_loop():
                 if wrong_language or info.language_probability < 0.5:
                     continue
                 text = " ".join(s.text.strip() for s in segments).strip()
+            t_stt = time.time()
             if not text or not awake.is_set():
                 continue
             eid = next(id_counter)
             post("orig", eid, text)
             translated = get_translator(src, tgt).translate(text)
+            t_tr = time.time()
             post("tr", eid, text, translated or t("no_translation"))
+            print(f"[задержка] фраза {len(audio) / SAMPLE_RATE:.1f} с: "
+                  f"распознавание {int((t_stt - t_start) * 1000)} мс, "
+                  f"перевод {int((t_tr - t_stt) * 1000)} мс")
             if translated:
                 S["last_tr"] = translated
                 if S["dub"]:
@@ -473,7 +481,9 @@ def dub_synth_loop():
         if not re.search(r"\w", text):
             continue
         try:
+            t_start = time.time()
             mono, sr = synth_with_fallback(text, cfg["target_lang"], rate_str(cfg["dub_rate"]))
+            print(f"[задержка] озвучка собеседника: синтез {int((time.time() - t_start) * 1000)} мс")
             play_q.put((mono, sr))
         except Exception as e:
             print("Не удалось озвучить фразу:", e)
@@ -495,9 +505,13 @@ def dub_play_loop():
                     tts_active.clear()
 
 
-def speak_to_friend(text, lang):
+def speak_to_friend(text, lang, t_release=None):
     """Проигрывает перевод в виртуальный микрофон (и тебе в наушники)."""
+    t_start = time.time()
     mono, sr = synth_with_fallback(text, lang, rate_str(cfg["own_rate"]))
+    if t_release:
+        print(f"[задержка] мой перевод: синтез {int((time.time() - t_start) * 1000)} мс, "
+              f"до начала озвучки {int((time.time() - t_release) * 1000)} мс после отпускания клавиши")
     cable = find_cable()
     cable_thread = None
     if cable:
@@ -622,7 +636,7 @@ def ptt_stop():
     if chunks:
         audio = np.concatenate(chunks)
         if len(audio) / MIC_RATE >= 0.4:
-            voice_q.put((audio, lang))
+            voice_q.put((audio, lang, time.time()))
 
 
 def watch_release(vk):
@@ -644,22 +658,27 @@ def to_16k(x):
 
 def voice_out_loop():
     while True:
-        audio48, lang = voice_q.get()
+        audio48, lang, t_release = voice_q.get()
         try:
             me = cfg["target_lang"]
             audio = to_16k(audio48)
+            t_start = time.time()
             with model_lock:
                 m = model_ref["m"]
                 if m is None:
                     continue
                 segments, info = m.transcribe(
-                    audio, language=me, vad_filter=True, beam_size=3,
+                    audio, language=me, vad_filter=True, beam_size=1,
                     condition_on_previous_text=False, without_timestamps=True,
                 )
                 said = " ".join(s.text.strip() for s in segments).strip()
+            t_stt = time.time()
             if not said:
                 continue
             out = get_translator(me, lang).translate(said)
+            t_tr = time.time()
+            print(f"[задержка] моя речь: распознавание {int((t_stt - t_start) * 1000)} мс, "
+                  f"перевод {int((t_tr - t_stt) * 1000)} мс")
             if not out:
                 notify(t("note_translate_fail"))
                 continue
@@ -667,7 +686,7 @@ def voice_out_loop():
             if edge_tts is None:
                 say(t("msg_need_edge"))
                 continue
-            speak_to_friend(out, lang)
+            speak_to_friend(out, lang, t_release)
         except Exception as e:
             print("Ошибка голосового перевода:", e)
 

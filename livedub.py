@@ -42,6 +42,7 @@ config.load()
 
 import i18n  # noqa: E402
 
+i18n.load_external()   # locales/*.json рядом с программой
 code = config.cfg["ui_language"]
 i18n.set_language(config.detect_ui_language() if code == "auto" else code)
 

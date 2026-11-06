@@ -44,6 +44,8 @@ The code is split into a few small modules:
 | [`ui.py`](ui.py) | settings window (customtkinter), subtitle overlay (Tkinter), tray icon (`pystray`) |
 | [`config.py`](config.py) | default settings, `settings.json`, language and voice lists |
 | [`i18n.py`](i18n.py) | interface translations |
+| [`updater.py`](updater.py) | downloads language packs from GitHub, checks for a new version |
+| `languages.json`, [`locales/`](locales) | extra translation languages and interface languages (plain data files) |
 
 `engine.py` runs a few threads that talk through queues:
 
@@ -116,6 +118,21 @@ Voice mode starts together with the program, because the call app now listens to
 | Num9 | quit |
 
 Plain NumPad keys are taken by the program while it runs. In the **App** tab you can switch the hotkeys to Ctrl+Num (or Alt, or Ctrl+Alt) instead. Subtitles can be dragged with the mouse; right click clears them. The tray icon has the same actions.
+
+## Adding languages and updates (no rebuild needed)
+
+Languages are plain data files next to the program, so you can add them without touching the code or rebuilding the `.exe`:
+
+- **More translation languages and voices**: edit `languages.json`. An entry looks like `"da": {"name": "Dansk", "voices": ["da-DK-JeppeNeural", "da-DK-ChristelNeural"], "mymemory": "danish"}`. The key is the Whisper language code, the voices are [Edge TTS](https://github.com/rany2/edge-tts) voice names. Restart the program.
+- **More interface languages**: copy `locales/_template.json` to `locales/xx.json` (`xx` = language code), set `"name"`, translate the values and restart. Missing keys fall back to English.
+- **Download new language packs** from this repository: *App* tab -> *Update language packs*. Only small JSON data files are downloaded and validated, the program code is never changed.
+- **New program version**: *App* tab -> *Check for new version* opens the Releases page. Code updates still mean replacing the files (or running `build.bat` again for the exe).
+
+Pull requests with new `locales/*.json` files and `languages.json` entries are welcome.
+
+## Tuning the delay
+
+The *Model* tab has a speed preset (Fast / Balanced / Smooth). Most of the delay is waiting for a phrase to end, so shorter phrases mean faster output but choppier translation. A bigger model is more accurate but never faster. The log (`livedub.log`) prints the time of every stage (`[задержка] ...`), which shows where the time goes.
 
 ## Build an .exe (optional)
 

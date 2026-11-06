@@ -3,13 +3,16 @@
 import ctypes
 import os
 import queue
+import threading
 import time
 import tkinter as tk
+import webbrowser
 
 import customtkinter as ctk
 
 import config
 import engine
+import updater
 from config import APP_NAME, APP_VERSION, LANG_NAMES, MODEL_SIZES, VOICE_CHOICES, cfg
 from i18n import LANGUAGES, set_language, t
 
@@ -18,6 +21,7 @@ SIZE_STEP = {0: 0, 1: 4, 2: 6}                          # старые стро�
 MINE_COLOR = "#8fd3ff"                                  # твои переведённые фразы
 MAX_LABELS = 5
 GRAY = ("gray40", "gray60")
+PRESETS = [(0.3, 4.0), (0.5, 6.0), (0.8, 9.0)]       # быстро / баланс / плавно: пауза, макс. длина фразы
 
 
 def resolve_language():
@@ -58,6 +62,7 @@ class App:
         self.root.minsize(780, 580)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        self.last_mode = ctk.get_appearance_mode()
         self.build_overlay()
         self.build_ui()
         self.build_tray()
@@ -69,6 +74,17 @@ class App:
     def apply_theme(self):
         mode = {"system": "System", "light": "Light", "dark": "Dark"}.get(cfg["theme"], "System")
         ctk.set_appearance_mode(mode)
+
+    def check_theme(self):
+        """Тема сменилась (в настройках или в самой Windows): пересоздаём окно с нуля.
+
+        customtkinter не перекрашивает вложенные блоки на лету, из-за этого светлая тема
+        выглядела сломанной (тёмные плашки и тёмный текст).
+        """
+        mode = ctk.get_appearance_mode()
+        if mode != self.last_mode:
+            self.last_mode = mode
+            self.root.after(250, self.rebuild_all)
 
     # ------------------------------------------------------------ субтитры поверх экрана
     def build_overlay(self):
@@ -321,6 +337,8 @@ class App:
             engine.replay()
         elif cmd == "open_ui":
             self.show_window()
+        elif cmd == "rebuild_ui":
+            self.rebuild_all()
         elif cmd == "quit":
             self.quit()
         self.last_status = None      # заставляем переключатели обновиться
@@ -375,6 +393,7 @@ class App:
             self.overlay.attributes("-topmost", True)
             self.overlay.lift()
         self.refresh_status()
+        self.check_theme()
         self.root.after(150, self.poll)
 
     def model_text(self):
@@ -407,6 +426,38 @@ class App:
             except Exception:
                 pass
         self.update_tray()
+
+    # ------------------------------------------------------------ обновления и пресеты
+    def apply_preset(self, display):
+        names = [t("preset_fast"), t("preset_balanced"), t("preset_smooth")]
+        if display in names:
+            pause, longest = PRESETS[names.index(display)]
+            self.set("pause_seconds", pause)
+            self.set("max_seconds", longest)
+
+    def do_update_packs(self):
+        def work():
+            count, err = updater.update_language_packs()
+            if err:
+                print("Обновление языковых пакетов:", err)
+                engine.say(t("upd_packs_fail"))
+            else:
+                engine.say(t("upd_packs_ok", n=count))
+                engine.cmd_q.put("rebuild_ui")
+        threading.Thread(target=work, daemon=True).start()
+
+    def do_check_updates(self):
+        def work():
+            version, url, err = updater.latest_release()
+            if err:
+                print("Проверка обновлений:", err)
+                engine.say(t("upd_fail"))
+            elif updater.is_newer(version, APP_VERSION):
+                engine.say(t("upd_new", v=version))
+                webbrowser.open(url)
+            else:
+                engine.say(t("upd_latest"))
+        threading.Thread(target=work, daemon=True).start()
 
     # ------------------------------------------------------------ виджеты-помощники
     def scroll(self, frame):
@@ -616,6 +667,14 @@ class App:
         self.model_labels.append(lbl)
         ctk.CTkButton(p, text=t("model_apply"), command=engine.request_model).pack(anchor="w", padx=8, pady=6)
         self.hint(p, t("model_hint"))
+        row = self.row(p, t("preset_label"))
+        names = [t("preset_fast"), t("preset_balanced"), t("preset_smooth")]
+        seg = ctk.CTkSegmentedButton(row, values=names, command=self.apply_preset)
+        seg.pack(side="right", padx=4)
+        for i, (pause, longest) in enumerate(PRESETS):
+            if abs(cfg["pause_seconds"] - pause) < 0.05 and abs(cfg["max_seconds"] - longest) < 0.5:
+                seg.set(names[i])
+        self.hint(p, t("latency_hint"))
         self.slider(p, t("timing_pause"), "pause_seconds", 0.2, 1.5, 13, "{:.1f}", float)
         self.slider(p, t("timing_max"), "max_seconds", 3, 15, 12, "{:.0f}", float)
 
@@ -627,6 +686,12 @@ class App:
         self.option(p, t("app_modifier"), [("none", t("mod_none")), ("ctrl", t("mod_ctrl")),
                                            ("alt", t("mod_alt")), ("ctrl+alt", t("mod_ctrl_alt"))],
                     "hotkey_modifier")
+        self.heading(p, t("upd_title"))
+        buttons = ctk.CTkFrame(p, fg_color="transparent")
+        buttons.pack(fill="x", padx=6, pady=4)
+        ctk.CTkButton(buttons, text=t("upd_packs_btn"), command=self.do_update_packs).pack(side="left", padx=4)
+        ctk.CTkButton(buttons, text=t("upd_check_btn"), command=self.do_check_updates).pack(side="left", padx=4)
+        self.hint(p, t("upd_hint"))
 
     def tab_about(self, p):
         ctk.CTkLabel(p, text=APP_NAME, anchor="w",

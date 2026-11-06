@@ -60,6 +60,20 @@ STRINGS = {
         "note_model_fail": "Model failed to load, see livedub.log",
         "note_cable_play": "VB-Cable not found, only you hear the translation.",
         "no_translation": "(translation unavailable)",
+        "preset_label": "Speed / smoothness",
+        "preset_fast": "Fast",
+        "preset_balanced": "Balanced",
+        "preset_smooth": "Smooth",
+        "latency_hint": "Fast = shorter phrases and less delay, but choppier translation. A bigger model is more accurate, not faster.",
+        "upd_title": "Updates",
+        "upd_packs_btn": "Update language packs",
+        "upd_check_btn": "Check for new version",
+        "upd_packs_ok": "Language packs updated: {n} files",
+        "upd_packs_fail": "Could not update language packs (see livedub.log)",
+        "upd_new": "New version {v} is available, opening the page",
+        "upd_latest": "You have the latest version",
+        "upd_fail": "Could not check for updates",
+        "upd_hint": "Language packs are small data files from GitHub; the program code is not changed.",
     },
     "ru": {
         "tab_main": "Главная", "tab_languages": "Языки", "tab_audio": "Звук",
@@ -114,6 +128,20 @@ STRINGS = {
         "note_model_fail": "Не удалось загрузить модель, смотри livedub.log",
         "note_cable_play": "VB-Cable не найден, перевод слышишь только ты.",
         "no_translation": "(перевод недоступен)",
+        "preset_label": "Скорость / плавность",
+        "preset_fast": "Быстро",
+        "preset_balanced": "Баланс",
+        "preset_smooth": "Плавно",
+        "latency_hint": "Быстро - короткие фразы и меньше задержка, но перевод более рваный. Модель побольше точнее, но не быстрее.",
+        "upd_title": "Обновления",
+        "upd_packs_btn": "Обновить языковые пакеты",
+        "upd_check_btn": "Проверить новую версию",
+        "upd_packs_ok": "Языковые пакеты обновлены: {n} файлов",
+        "upd_packs_fail": "Не удалось обновить языковые пакеты (см. livedub.log)",
+        "upd_new": "Доступна новая версия {v}, открываю страницу",
+        "upd_latest": "У тебя последняя версия",
+        "upd_fail": "Не удалось проверить обновления",
+        "upd_hint": "Языковые пакеты - маленькие файлы с данными из GitHub, код программы не меняется.",
     },
     "nl": {
         "tab_main": "Start", "tab_languages": "Talen", "tab_audio": "Geluid",
@@ -168,6 +196,20 @@ STRINGS = {
         "note_model_fail": "Model laden mislukt, zie livedub.log",
         "note_cable_play": "VB-Cable niet gevonden, alleen jij hoort de vertaling.",
         "no_translation": "(vertaling niet beschikbaar)",
+        "preset_label": "Snelheid / vloeiendheid",
+        "preset_fast": "Snel",
+        "preset_balanced": "Gebalanceerd",
+        "preset_smooth": "Vloeiend",
+        "latency_hint": "Snel = kortere zinnen en minder vertraging, maar een hakkeligere vertaling. Een groter model is nauwkeuriger, niet sneller.",
+        "upd_title": "Updates",
+        "upd_packs_btn": "Taalpakketten bijwerken",
+        "upd_check_btn": "Op nieuwe versie controleren",
+        "upd_packs_ok": "Taalpakketten bijgewerkt: {n} bestanden",
+        "upd_packs_fail": "Taalpakketten bijwerken mislukt (zie livedub.log)",
+        "upd_new": "Nieuwe versie {v} beschikbaar, pagina wordt geopend",
+        "upd_latest": "Je hebt de nieuwste versie",
+        "upd_fail": "Controleren op updates mislukt",
+        "upd_hint": "Taalpakketten zijn kleine databestanden van GitHub; de programmacode verandert niet.",
     },
     "uk": {
         "tab_main": "Головна", "tab_languages": "Мови", "tab_audio": "Звук",
@@ -222,6 +264,20 @@ STRINGS = {
         "note_model_fail": "Не вдалося завантажити модель, див. livedub.log",
         "note_cable_play": "VB-Cable не знайдено, переклад чуєш лише ти.",
         "no_translation": "(переклад недоступний)",
+        "preset_label": "Швидкість / плавність",
+        "preset_fast": "Швидко",
+        "preset_balanced": "Баланс",
+        "preset_smooth": "Плавно",
+        "latency_hint": "Швидко - коротші фрази й менша затримка, але переклад рваніший. Більша модель точніша, але не швидша.",
+        "upd_title": "Оновлення",
+        "upd_packs_btn": "Оновити мовні пакети",
+        "upd_check_btn": "Перевірити нову версію",
+        "upd_packs_ok": "Мовні пакети оновлено: {n} файлів",
+        "upd_packs_fail": "Не вдалося оновити мовні пакети (див. livedub.log)",
+        "upd_new": "Доступна нова версія {v}, відкриваю сторінку",
+        "upd_latest": "У тебе остання версія",
+        "upd_fail": "Не вдалося перевірити оновлення",
+        "upd_hint": "Мовні пакети - невеликі файли з даними з GitHub, код програми не змінюється.",
     },
 }
 
@@ -245,3 +301,52 @@ def t(key, **kwargs):
         except Exception:
             return text
     return text
+
+
+# ---------- внешние языки (папка locales рядом с программой) ----------
+def validate_pack(strings):
+    """Оставляет только известные ключи с текстовыми значениями."""
+    if not isinstance(strings, dict):
+        return {}
+    return {k: v for k, v in strings.items() if k in STRINGS["en"] and isinstance(v, str)}
+
+
+def load_external():
+    """Подгружает locales/xx.json. Новый язык = новый файл, код программы трогать не нужно.
+
+    Формат файла: {"name": "Dansk", "strings": {"tab_main": "Hjem", ...}}
+    Недостающие ключи берутся из английского.
+    """
+    import json
+    import os
+    import re
+    import config
+
+    folder = os.path.join(config.BASE_DIR, "locales")
+    if not os.path.isdir(folder):
+        return 0
+    loaded = 0
+    for fname in sorted(os.listdir(folder)):
+        if fname.startswith("_") or not fname.endswith(".json"):
+            continue
+        code = fname[:-5]
+        if not re.match(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$", code):
+            continue
+        try:
+            with open(os.path.join(folder, fname), encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                continue
+            strings = validate_pack(data.get("strings"))
+            if not strings:
+                continue
+            STRINGS.setdefault(code, {}).update(strings)
+            name = data.get("name")
+            if isinstance(name, str) and name.strip():
+                LANGUAGES[code] = name.strip()[:40]
+            else:
+                LANGUAGES.setdefault(code, code)
+            loaded += 1
+        except Exception as e:
+            print(f"Не удалось прочитать {fname}:", e)
+    return loaded

@@ -1,0 +1,46 @@
+{
+  "vi": {
+    "name": "Tiếng Việt",
+    "voices": [
+      "vi-VN-NamMinhNeural",
+      "vi-VN-HoaiMyNeural"
+    ]
+  },
+  "id": {
+    "name": "Bahasa Indonesia",
+    "voices": [
+      "id-ID-ArdiNeural",
+      "id-ID-GadisNeural"
+    ]
+  },
+  "th": {
+    "name": "ไทย",
+    "voices": [
+      "th-TH-NiwatNeural",
+      "th-TH-PremwadeeNeural"
+    ]
+  },
+  "sk": {
+    "name": "Slovenčina",
+    "voices": [
+      "sk-SK-LukasNeural",
+      "sk-SK-ViktoriaNeural"
+    ],
+    "mymemory": "slovak"
+  },
+  "hr": {
+    "name": "Hrvatski",
+    "voices": [
+      "hr-HR-SreckoNeural",
+      "hr-HR-GabrijelaNeural"
+    ],
+    "mymemory": "croatian"
+  },
+  "sr": {
+    "name": "Srpski",
+    "voices": [
+      "sr-RS-NicholasNeural",
+      "sr-RS-SophieNeural"
+    ]
+  }
+}
